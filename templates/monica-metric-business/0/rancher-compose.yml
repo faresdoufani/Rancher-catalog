@@ -1,0 +1,120 @@
+version: '2'
+catalog:
+    name: Monica metric business
+    version: 1.0.0
+    description: Catalog monica Metric
+    questions:
+    - variable: "project_name"
+      type: "string"
+      required: true
+      label: "Project Name"
+      description: "Project Name"
+      default: "demo-petclinic"
+
+    - variable: "host_project"
+      type: "string"
+      required: true
+      label: "Host and Port of your project"
+      description: "example 52.78.90.90:8080"
+
+    - variable: "uri_metrics"
+      type: "string"
+      required: true
+      label: "uri of your metrics"
+      description: "example /metrics"
+      default: "/metrics"
+
+    - variable: "kafka_host"
+      type: "string"
+      required: true
+      label: "Kafka Host"
+      description: "Kafka Host"
+      default: "52.78.90.90"
+
+    - variable: "kafka_port"
+      type: "int"
+      required: true
+      label: "Kafka Port"
+      description: "Kafka Port"
+      default: "9092"
+
+    - variable: "topic_monica"
+      type: "string"
+      required: true
+      label: "Topic"
+      description: "Topic"
+      default: "monicatopic"
+
+    - variable: "environment"
+      type: "string"
+      required: true
+      label: "environment"
+      description: "environment"
+      default: "dev"
+
+    - variable: "retention"
+      type: "enum"
+      required: true
+      label: "Retention"
+      description: "Retention"
+      options:
+        - week
+        - month
+        - quarter
+        - year
+
+
+services:
+  metricbeat-monica:
+    scale: 1
+    metadata:
+      metricbeat-config: |
+        metricbeat.config.modules:
+          reload.period: 10s
+          reload.enabled: false
+        metricbeat.modules:
+        - module: prometheus
+          metricsets: ["collector"]
+          enabled: true
+          period: 5s
+          hosts: ["demo-todo:8090"]
+          metrics_path: /metrics
+          namespace: demo-todo
+        - module: prometheus
+          metricsets: ["collector"]
+          enabled: true
+          period: 5s
+          hosts: ["demo-spring:8080"]
+          metrics_path: /manage/prometheus
+          namespace: demo-spring
+        output.logstash:
+          hosts: ["logstash-collector:5044"]
+          enabled: true
+          worker: 1
+
+
+  logstash-collector:
+    metadata:
+      logstash:
+        inputs: |
+          beats {
+            port => 5044
+          }
+        filters: |
+          mutate {
+            add_field => {
+              "env" => "dev"
+              "rancher-env" => "myapp-project"
+              "retention" => "month"
+              "type" =>  "prometheus-metrics-demo"
+              "project" =>  "myapp-project"
+            }
+          }
+        outputs: |
+          kafka {
+            bootstrap_servers => "{{ kafka_endpoint_url }}"
+            topic_id => "monicatopic"
+            codec => "json"
+          }
+          stdout { codec => rubydebug }
+

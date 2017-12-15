@@ -1,0 +1,5 @@
+name: Monica metric business
+description: |
+  Catalog monica Metric for business , metrics save into ElasticSearch
+version: 1.0.0
+category: Monica

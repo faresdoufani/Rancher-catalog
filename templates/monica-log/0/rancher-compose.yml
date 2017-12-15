@@ -1,0 +1,96 @@
+version: '2'
+catalog:
+    name: Monica Log
+    version: 1.0.0
+    description: Catalog monica Log
+    questions:
+    - variable: "project_name"
+      type: "string"
+      required: true
+      label: "Project Name"
+      description: "Project Name"
+      default: "demo-petclinic"
+
+    - variable: "kafka_host"
+      type: "string"
+      required: true
+      label: "Kfka Host"
+      description: "Kafka Host"
+      default: "52.92.89.70"
+
+    - variable: "kafka_port"
+      type: "int"
+      required: true
+      label: "Kafka Port"
+      description: "Kafka Port"
+      default: "9092"
+
+    - variable: "topic_monica"
+      type: "string"
+      required: true
+      label: "Topic"
+      description: "Topic"
+      default: "monica-dev"
+
+services:
+  logstash-collector:
+    metadata:
+      logstash:
+        patterns:
+          - NGUSERNAME [a-zA-Z\.\@\-\+_%]+
+          - NGUSER %{NGUSERNAME}
+          - NGINXACCESS %{IPORHOST:clientip} %{NGUSER:ident} %{NGUSER:auth} \[%{HTTPDATE:timestamp_nginx_access}\] "%{WORD:verb} %{URIPATHPARAM:request} HTTP/%{NUMBER:httpversion}" %{NUMBER:response} (?:%{NUMBER:bytes}|-) (?:"(?:%{URI:referrer}|-)"|%{QS:referrer}) %{QS:agent}
+        inputs: |
+          udp {
+            port => 5000
+            codec => "json"
+          }
+          file {
+            path => "/host/var/log/kern.log"
+            type => "kernel"
+          }
+
+        filters: |
+          if ![type] {
+            mutate {
+              add_field => { "type" =>  "myapp-demo" }
+            }
+          }
+
+          # add generic fields on all kind of logs
+          mutate {
+            add_field => {
+              "env" => "dev"
+              "rancher-env" => "myapp-project"
+            }
+          }
+
+          if [type] == "kernel" {
+            grok {  # kernel logs
+              match => {"message" => "%{SYSLOGTIMESTAMP:timestamp}.*kernel: \[.*\] %{GREEDYDATA:message}"}
+              overwrite => [ "message" ]
+            }
+
+            date {
+              match => [ "timestamp" , "MMM d HH:mm:ss", "MMM dd HH:mm:ss", "ISO8601" ]
+              target => "timestamp"
+            }
+          }
+
+          if "nginx:" in [docker][image] {
+            grok {
+              match => { "message" => "%{NGINXACCESS}" }
+            }
+            date {
+              match => [ "timestamp_nginx_access" , "dd/MMM/YYYY:HH:mm:ss Z" ]
+              target => "timestamp_nginx_access"
+            }
+          }
+
+        outputs: |
+          kafka {
+            bootstrap_servers => "${kafka_host}:${kafka_port}"
+            topic_id => "${topic_monica}"
+            codec => "json"
+          }
+          stdout { codec => rubydebug }
