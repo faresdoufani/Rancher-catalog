@@ -1,0 +1,6 @@
+name: Monica metric business
+description: |
+  Catalog monica Metric for technical data : cpu, memory etc..
+  Use Grafana for vizualise the data.
+version: 1.0.0
+category: Monica

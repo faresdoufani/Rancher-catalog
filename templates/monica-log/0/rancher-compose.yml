@@ -14,7 +14,7 @@ catalog:
     - variable: "kafka_host"
       type: "string"
       required: true
-      label: "Kfka Host"
+      label: "Kafka Host"
       description: "Kafka Host"
       default: "52.92.89.70"
 
