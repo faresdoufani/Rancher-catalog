@@ -32,23 +32,23 @@ catalog:
       description: "Topic"
       default: "monicatopic"
 
-     - variable: "environment"
-       type: "string"
-       required: true
-       label: "environment"
-       description: "environment"
-       default: "dev"
+    - variable: "environment"
+      type: "string"
+      required: true
+      label: "environment"
+      description: "environment"
+      default: "dev"
 
-     - variable: "retention"
-       type: "enum"
-       required: true
-       label: "Retention"
-       description: "Retention"
-       options:
-         - week
-         - month
-         - quarter
-         - year
+    - variable: "retention"
+      type: "enum"
+      required: true
+      label: "Retention"
+      description: "Retention"
+      options:
+        - week
+        - month
+        - quarter
+        - year
 
 services:
   logstash-collector:
