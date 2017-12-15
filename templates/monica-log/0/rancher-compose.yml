@@ -9,7 +9,7 @@ catalog:
       required: true
       label: "Project Name"
       description: "Project Name"
-      default: "demo-petclinic"
+      default: "demo"
 
     - variable: "kafka_host"
       type: "string"
@@ -30,7 +30,25 @@ catalog:
       required: true
       label: "Topic"
       description: "Topic"
-      default: "monica-dev"
+      default: "monicatopic"
+
+     - variable: "environment"
+       type: "string"
+       required: true
+       label: "environment"
+       description: "environment"
+       default: "dev"
+
+     - variable: "retention"
+       type: "enum"
+       required: true
+       label: "Retention"
+       description: "Retention"
+       options:
+         - week
+         - month
+         - quarter
+         - year
 
 services:
   logstash-collector:
