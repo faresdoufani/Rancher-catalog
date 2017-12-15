@@ -1,107 +1,64 @@
 version: '2'
 services:
-  prometheus-rancher-exporter:
-    labels:
-      io.rancher.container.hostname_override: container_name
-      io.rancher.container.create_agent: 'true'
-      io.rancher.container.agent.role: environment
-      io.rancher.container.pull_image: always
-    tty: true
-    environment:
-      HIDE_SYS: 'false'
-    image: infinityworks/prometheus-rancher-exporter:v0.22.52
 
-  prometheus-config:
-    image: adopteunops/rancher-prometheus-config:latest
-    links:
-    - cadvisor:cadvisor
-    - prometheus-rancher-exporter:prometheus-rancher-exporter
-    - node-exporter:node-exporter
-  prometheus-rancher-scraper:
-    image: adopteunops/prom-rancher-sd:1.0.1
-  prometheus:
+  metricbeat-config:
     labels:
-      io.rancher.container.hostname_override: container_name
-      io.rancher.sidekicks: prometheus-config,prometheus-rancher-scraper
-      io.rancher.scheduler.affinity:container_label_ne: io.rancher.stack_service.name=$${stack_name}/$${service_name}
-    command:
-    - -config.file=/etc/prom-conf/prometheus.yml
-    - -storage.local.path=/prometheus
-    - -web.console.libraries=/etc/prometheus/console_libraries
-    - -web.console.templates=/etc/prometheus/consoles
-    tty: true
-    image: prom/prometheus:v1.7.1
-    links:
-    - cadvisor:cadvisor
-    - prometheus-rancher-exporter:prometheus-rancher-exporter
-    - node-exporter:node-exporter
+        io.rancher.container.start_once: true
+        io.rancher.container.pull_image: always
+    image: adopteunops/metricbeat-config:1.0.0-SNAPSHOT
+
+  metricbeat-monica:
+    image: {{docker_elastic_repo}}/beats/metricbeat:{{elasticsearch_version}}
+    labels:
+        io.rancher.container.pull_image: always
+        io.rancher.sidekicks: metricbeat-config
+        io.rancher.scheduler.global: "true"
     volumes:
-    - prometheus-volume:/prometheus
+    - /proc:/hostfs/proc:ro
+    - /sys/fs/cgroup:/hostfs/sys/fs/cgroup:ro
+    - /:/hostfs:ro
+    external_links:
+    - 'demo-todo/todo:demo-todo'
+    - 'demo-spring/demo-monica:demo-spring'
+    links:
+    - logstash-collector
     volumes_from:
-    - prometheus-config
-    - prometheus-rancher-scraper
+    - metricbeat-config
+    command:
+    - metricbeat
+    - -c
+    - /usr/share/metricbeat-config/metricbeat.yml
+    - -e
+    - -system.hostfs=/hostfs
 
-  grafana:
-    ports:
-      - 3000:3000
+  logstash-collector-config:
+    restart: always
+    image: simpletechs/rancher_logstash-config:v0.2.0-smpl1
     labels:
       io.rancher.container.hostname_override: container_name
-      io.rancher.scheduler.affinity:host_label: role=monitoring
-    tty: true
-    image: grafana/grafana:4.5.1
+      logspout.exclude: 'true'
     environment:
-      GF_SECURITY_ADMIN_PASSWORD: admin
-    links:
-    - prometheus:prometheus
-    volumes:
-    - grafana-volume:/var/lib/grafana
+      LOGSPOUT: ignore
 
-  grafana-setup:
-    image: adopteunops/grafana-rancher-setup:latest
-    stdin_open: true
+  logstash-collector:
+    restart: always
     tty: true
-    links:
-    - grafana:grafana
-    labels:
-      io.rancher.container.start_once: 'true'
-
-  node-exporter:
-    labels:
-       io.rancher.container.hostname_override: container_name
-       io.rancher.scheduler.global: 'true'
-    tty: true
-    volumes:
-    - /proc:/host/proc
-    - /sys:/host/sys
-    - /:/rootfs
+    volumes_from:
+    - logstash-collector-config
     command:
-    - -collector.procfs
-    - /host/proc
-    - -collector.sysfs
-    - /host/sys
-    - -collector.filesystem.ignored-fs-types
-    - ^(aufs|proc|nsfs|shm|cgroup|tmpfs)
-    image: prom/node-exporter:v0.14.0
-    stdin_open: true
-
-  cadvisor:
-    labels:
-      io.rancher.scheduler.global: 'true'
-      com.prometheus.monitoring: true
-      com.prometheus.port: 8080
-    tty: true
-    image: google/cadvisor:v0.27.1
+    - logstash
+    - -f
+    - /etc/logstash
+    image: {{docker_elastic_repo}}/logstash/logstash:{{elasticsearch_version}}
+    environment:
+      xpack.monitoring.enabled: false
+      LOGSPOUT: ignore
     stdin_open: true
     volumes:
-      - "/:/rootfs:ro"
-      - "/var/run:/var/run:rw"
-      - "/sys:/sys:ro"
-      - "/var/lib/docker/:/var/lib/docker:ro"
-
-volumes:
-  prometheus-volume:
-    per_container: true
-    driver: {{volume_driver}}
-  grafana-volume:
-    per_container: true
-    driver: {{volume_driver}}
+    - '/var/log:/host/var/log:ro'
+    user: root
+    labels:
+      io.rancher.sidekicks: logstash-collector-config
+      io.rancher.scheduler.global: 'true'
+      io.rancher.container.hostname_override: container_name
+      logspout.exclude: 'true'

@@ -1,7 +1,6 @@
-# notemplating
 version: '2'
 catalog:
-    name: Monica metric technical
+    name: Monica metric business
     version: 1.0.0
     description: Catalog monica Metric
     questions:
@@ -12,174 +11,110 @@ catalog:
       description: "Project Name"
       default: "demo-petclinic"
 
+    - variable: "host_project"
+      type: "string"
+      required: true
+      label: "Host and Port of your project"
+      description: "example 52.78.90.90:8080"
+
+    - variable: "uri_metrics"
+      type: "string"
+      required: true
+      label: "uri of your metrics"
+      description: "example /metrics"
+      default: "/metrics"
+
+    - variable: "kafka_host"
+      type: "string"
+      required: true
+      label: "Kafka Host"
+      description: "Kafka Host"
+      default: "52.78.90.90"
+
+    - variable: "kafka_port"
+      type: "int"
+      required: true
+      label: "Kafka Port"
+      description: "Kafka Port"
+      default: "9092"
+
+    - variable: "topic_monica"
+      type: "string"
+      required: true
+      label: "Topic"
+      description: "Topic"
+      default: "monicatopic"
+
     - variable: "environment"
       type: "string"
       required: true
       label: "environment"
-      description: "example 52.78.90.90:8080"
+      description: "environment"
+      default: "dev"
+
+    - variable: "retention"
+      type: "enum"
+      required: true
+      label: "Retention"
+      description: "Retention"
+      options:
+        - week
+        - month
+        - quarter
+        - year
+
+
 services:
-  prometheus-rancher-exporter:
-    health_check:
-      port: 9173
-      interval: 5000
-      unhealthy_threshold: 3
-      request_line: ''
-      healthy_threshold: 2
-      response_timeout: 5000
-  prometheus:
-    scale: {{prometheus_scale}}
-    health_check:
-      port: 9090
-      interval: 5000
-      unhealthy_threshold: 3
-      request_line: ''
-      healthy_threshold: 2
-      response_timeout: 5000
+  metricbeat-monica:
+    scale: 1
     metadata:
-      prometheus-config: |
-        global:
-          scrape_interval:     5s
-          evaluation_interval: 5s
-          external_labels:
-              monitor: 'exporter-metrics'
-              rancher_env: '{{ NAME_PROJECT }}'
-              environment: 'Development'
+      metricbeat-config: |
+        metricbeat.config.modules:
+          reload.period: 10s
+          reload.enabled: false
+        metricbeat.modules:
+        - module: prometheus
+          metricsets: ["collector"]
+          enabled: true
+          period: 5s
+          hosts: ["demo-todo:8090"]
+          metrics_path: /metrics
+          namespace: demo-todo
+        - module: prometheus
+          metricsets: ["collector"]
+          enabled: true
+          period: 5s
+          hosts: ["demo-spring:8080"]
+          metrics_path: /manage/prometheus
+          namespace: demo-spring
+        output.logstash:
+          hosts: ["logstash-collector:5044"]
+          enabled: true
+          worker: 1
 
-        rule_files:
-        - /etc/prom-conf/rules.yml
 
-        scrape_configs:
-        - job_name: 'Metrics'
-          file_sd_configs:
-          - files:
-            - /prom-rancher-sd-data/node_exporter.json
-            - /prom-rancher-sd-data/rancher.json
-            refresh_interval: 15s
-
-        - job_name: 'rancher-api'
-          dns_sd_configs:
-          - names:
-            - 'prometheus-rancher-exporter'
-            refresh_interval: 15s
-            type: A
-            port: 9173
-
-        - job_name: 'Prometheus'
-          static_configs:
-            - targets:
-              - '127.0.0.1:9090'
-
-      prometheus-rules: |
-ALERT HostDown
-  IF rancher_host_agent_state{state != 'active'} == 1
-  FOR 5m
-  LABELS { severity = "critical" }
-  ANNOTATIONS {
-    summary = "Host {{ $$labels.name }} down",
-    description = "{{ $$labels.name }} has been {{ $$labels.state }} for more than 5 minutes."
-  }
-
-ALERT StackUnHealthy
-  IF rancher_stack_health_status{health_state='unhealthy'} == 1
-  FOR 10m
-  LABELS {
-    severity = "critical",
-    service = "{{ $$labels.name }}"
-  }
-  ANNOTATIONS {
-    summary = "Stack {{ $$labels.name }} is unhealthy",
-    description = "{{ $$labels.name }} has been unhealthy for more than 10 minutes."
-  }
-
-ALERT DiskWillFillInOneDay
-  IF predict_linear(node_filesystem_free{mountpoint='/rootfs'}[1h], 24*3600) < 0
-  FOR 1h
-  LABELS {
-    severity="major"
-  }
-  ANNOTATIONS {
-    summary = "Instance {{ $$labels.name }} disk warning",
-    description = "{{ $$labels.name }} : {{ $$labels.mountpoint }} will be filled within 1 day."
-  }
-
-ALERT DiskWillFillIn4Hours
-  IF predict_linear(node_filesystem_free{mountpoint='/rootfs'}[1h], 4*3600) < 0
-  FOR 5m
-  LABELS {
-    severity="critical"
-  }
-  ANNOTATIONS {
-    summary = "Instance {{ $$labels.name }} disk alert",
-    description = "{{ $$labels.name }} : {{ $$labels.mountpoint }} will be filled within 4 hours."
-  }
-
-ALERT RootDiskUsedAt85Percent
-  IF (node_filesystem_size{mountpoint='/rootfs'} - node_filesystem_avail{mountpoint='/rootfs'}) / node_filesystem_size{mountpoint='/rootfs'} * 100 > 85
-  FOR 5m
-  LABELS {
-    severity="critical"
-  }
-  ANNOTATIONS {
-    summary = "Instance {{ $$labels.name }} disk alert : root disk > 85%",
-    description = "Disk used on {{ $$labels.name }} root partition is {{ $$value }}%"
-  }
-
-ALERT MaxFileDescriptor
-  IF node_filefd_allocated > 45000
-  FOR 10m
-  LABELS {
-    severity="major"
-  }
-  ANNOTATIONS {
-    summary = "High file descriptor usage",
-    description = "File descriptor open are really high on {{ $$labels.instance }}."
-  }
-
-ALERT ScrapingTargetState
-  IF up == 0
-  FOR 10m
-  LABELS {
-    severity="minor"
-  }
-  ANNOTATIONS {
-    summary = "Unable to contact scraping target",
-    description = "Unable to contact scraping target on {{ $$labels.instance }} from job {{ $$labels.job }}."
-  }
-
-  grafana:
-    health_check:
-      port: 3000
-      interval: 5000
-      unhealthy_threshold: 3
-      request_line: ''
-      healthy_threshold: 2
-      response_timeout: 5000
-
-  grafana-setup:
+  logstash-collector:
     metadata:
-      datasources: |
-        [
-{
-  "name": "prometheus",
-  "value":
-  {
-      "id": "prometheus",
-      "orgId": 1,
-      "name": "prometheus",
-      "type": "prometheus",
-      "typeLogoUrl": "",
-      "access": "proxy",
-      "url": "http://prometheus:9090",
-      "basicAuth": false,
-      "basicAuthUser": "",
-      "basicAuthPassword": "",
-      "withCredentials": false,
-      "isDefault": false,
-      "jsonData": {}
-
-
-  }
-}
-
-        ]
+      logstash:
+        inputs: |
+          beats {
+            port => 5044
+          }
+        filters: |
+          mutate {
+            add_field => {
+              "env" => "dev"
+              "rancher-env" => "myapp-project"
+              "retention" => "month"
+              "type" =>  "prometheus-metrics-demo"
+              "project" =>  "myapp-project"
+            }
+          }
+        outputs: |
+          kafka {
+            bootstrap_servers => "{{ kafka_endpoint_url }}"
+            topic_id => "monicatopic"
+            codec => "json"
+          }
+          stdout { codec => rubydebug }
 
